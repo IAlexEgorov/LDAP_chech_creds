@@ -1,10 +1,20 @@
 import os
-from flask import Flask, g, session, redirect, request, url_for, jsonify
+from flask import Flask, g, session, redirect, request, url_for, jsonify, render_template
 from requests_oauthlib import OAuth2Session
+import sqlite3
 
-OAUTH2_CLIENT_ID = os.environ['OAUTH2_CLIENT_ID']
-OAUTH2_CLIENT_SECRET = os.environ['OAUTH2_CLIENT_SECRET']
+conn = sqlite3.connect(":memory:") # или :memory: чтобы сохранить в RAM
+cursor = conn.cursor()
+ 
+cursor.execute("""CREATE TABLE users
+                  (login text, password text)
+               """)
+
+
+OAUTH2_CLIENT_ID = 910986814901338112
+OAUTH2_CLIENT_SECRET = "WvPLki-EeHwc2-t4J_-mwPXgHVqncaAM"
 OAUTH2_REDIRECT_URI = 'http://localhost:5000/callback'
+
 
 API_BASE_URL = os.environ.get('API_BASE_URL', 'https://discordapp.com/api')
 AUTHORIZATION_BASE_URL = API_BASE_URL + '/oauth2/authorize'
@@ -13,6 +23,7 @@ TOKEN_URL = API_BASE_URL + '/oauth2/token'
 app = Flask(__name__)
 app.debug = True
 app.config['SECRET_KEY'] = OAUTH2_CLIENT_SECRET
+
 
 if 'http://' in OAUTH2_REDIRECT_URI:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = 'true'
@@ -36,7 +47,6 @@ def make_session(token=None, state=None, scope=None):
         auto_refresh_url=TOKEN_URL,
         token_updater=token_updater)
 
-
 @app.route('/')
 def index():
     scope = request.args.get(
@@ -47,28 +57,25 @@ def index():
     session['oauth2_state'] = state
     return redirect(authorization_url)
 
-
 @app.route('/callback')
 def callback():
-    if request.values.get('error'):
-        return request.values['error']
-    discord = make_session(state=session.get('oauth2_state'))
-    token = discord.fetch_token(
-        TOKEN_URL,
-        client_secret=OAUTH2_CLIENT_SECRET,
-        authorization_response=request.url)
-    session['oauth2_token'] = token
-    return redirect(url_for('.me'))
+    return render_template('auth.html')
 
+@app.route('/api', methods = ['POST', 'GET'])
+def login():
+    if request.method == 'POST':
+	    username = request.form.get('user') 
+	    password = request.form.get('password')
+    print(ldap_check_cred(username, password))
 
-@app.route('/me')
-def me():
-    discord = make_session(token=session.get('oauth2_token'))
-    user = discord.get(API_BASE_URL + '/users/@me').json()
-    guilds = discord.get(API_BASE_URL + '/users/@me/guilds').json()
-    connections = discord.get(API_BASE_URL + '/users/@me/connections').json()
-    return jsonify(user=user, guilds=guilds, connections=connections)
+    return render_template('auth.html')
 
+def ldap_check_cred(nname,passw):
+    check_rez = os.system("ldapwhoami -x -D uid="+ nname +",cn=users,cn=accounts,dc=web-bee,dc=loc -w " + passw + " -H ldap://ipa.web-bee.loc:389")
+    if check_rez == 0:
+        return True
+    else:
+        return False
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
